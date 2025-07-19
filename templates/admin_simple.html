@@ -56,13 +56,15 @@
             </div>
             <div class="stat-box">
                 <div class="stat-number">
-                    {{ responses | selectattr('percentage', 'lt', 60) | list | length }}
+                    {% set focus_violations = responses | map(attribute='focus_warnings') | map('default', 0) | list %}
+                    {{ focus_violations | select('>', 0) | list | length }}
                 </div>
-                <div class="stat-label">Below 60%</div>
+                <div class="stat-label">Focus Violations</div>
             </div>
         </div>
 
         <h3>All Quiz Submissions</h3>
+        <div class="table-container">
         <table>
             <thead>
                 <tr>
@@ -72,6 +74,8 @@
                     <th>Score</th>
                     <th>Percentage</th>
                     <th>Answered</th>
+                    <th>Time Taken</th>
+                    <th>Focus Warnings</th>
                     <th>Status</th>
                     <th>Actions</th>
                 </tr>
@@ -95,6 +99,14 @@
                         </span>
                     </td>
                     <td>{{ response.get('questions_answered', response.total) }}/{{ response.total }}</td>
+                    <td>{{ response.get('time_elapsed_minutes', 'N/A') }} min</td>
+                    <td>
+                        {% if response.get('focus_warnings', 0) > 0 %}
+                            <span style="color: #dc3545; font-weight: bold;">{{ response.get('focus_warnings') }} ⚠️</span>
+                        {% else %}
+                            <span style="color: #28a745;">0 ✅</span>
+                        {% endif %}
+                    </td>
                     <td>
                         {% if response.get('time_forced') %}
                             <span style="color: #dc3545;">⏰ Time Expired</span>
@@ -109,6 +121,7 @@
                 {% endfor %}
             </tbody>
         </table>
+        </div>
 
         {% else %}
         <div class="no-responses">
