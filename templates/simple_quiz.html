@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{{ quiz_data.title }}</title>
+    <style>
+        body { font-family: Arial, sans-serif; background: #f5f5f5; margin: 0; padding: 20px; }
+        .container { max-width: 900px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
+        .header { text-align: center; margin-bottom: 30px; }
+        .title { color: #333; font-size: 28px; margin-bottom: 10px; }
+        .subtitle { color: #666; font-size: 16px; margin-bottom: 20px; }
+        .candidate-info { background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 30px; }
+        .candidate-info input { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 5px; font-size: 16px; }
+        .question { margin: 20px 0; padding: 20px; border: 1px solid #ddd; border-radius: 8px; background: #f8f9fa; }
+        .question-title { font-size: 18px; font-weight: bold; margin-bottom: 15px; color: #333; }
+        .options { margin: 15px 0; }
+        .option { margin: 10px 0; padding: 12px; border: 2px solid #ddd; border-radius: 5px; cursor: pointer; transition: all 0.3s; }
+        .option:hover { border-color: #007bff; background: #f0f8ff; }
+        .option.selected { border-color: #007bff; background: #007bff; color: white; }
+        .text-input { width: 100%; padding: 12px; border: 2px solid #ddd; border-radius: 5px; font-size: 16px; }
+        .text-input:focus { border-color: #007bff; outline: none; }
+        .submit-section { text-align: center; margin-top: 40px; padding: 20px; background: #f8f9fa; border-radius: 8px; }
+        .submit-btn { background: #28a745; color: white; padding: 15px 40px; border: none; border-radius: 5px; font-size: 18px; cursor: pointer; }
+        .submit-btn:hover { background: #218838; }
+        .submit-btn:disabled { background: #6c757d; cursor: not-allowed; }
+        .progress { margin: 20px 0; }
+        .progress-bar { width: 100%; height: 10px; background: #e9ecef; border-radius: 5px; overflow: hidden; }
+        .progress-fill { height: 100%; background: #007bff; transition: width 0.3s; }
+        .admin-link { position: fixed; bottom: 20px; right: 20px; background: #dc3545; color: white; padding: 10px 15px; border-radius: 5px; text-decoration: none; }
+        .admin-link:hover { background: #c82333; color: white; text-decoration: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1 class="title">{{ quiz_data.title }}</h1>
+            <p class="subtitle">{{ quiz_data.description }}</p>
+            <p><strong>Total Questions:</strong> {{ quiz_data.questions|length }}</p>
+        </div>
+
+        <div class="candidate-info">
+            <label for="candidate-name"><strong>Your Name:</strong></label>
+            <input type="text" id="candidate-name" placeholder="Enter your full name" required>
+        </div>
+
+        <div class="progress">
+            <div class="progress-bar">
+                <div class="progress-fill" id="progress-fill" style="width: 0%"></div>
+            </div>
+            <p id="progress-text">0 of {{ quiz_data.questions|length }} questions answered</p>
+        </div>
+
+        <div id="questions">
+            {% for question in quiz_data.questions %}
+            <div class="question">
+                <div class="question-title">Q{{ loop.index }}: {{ question.question|replace('\n', '<br>')|safe }}</div>
+                
+                {% if question.get('type') == 'text_input' %}
+                    <input type="text" class="text-input" id="answer-{{ question.id }}" 
+                           placeholder="Enter your answer here..." 
+                           onchange="saveTextAnswer({{ question.id }}, this.value)">
+                {% else %}
+                    <div class="options">
+                        {% for option in question.options %}
+                        <div class="option" onclick="selectOption({{ question.id }}, {{ loop.index0 }})" 
+                             id="option-{{ question.id }}-{{ loop.index0 }}">
+                            {{ option }}
+                        </div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="submit-section">
+            <button class="submit-btn" id="submit-btn" onclick="submitQuiz()" disabled>
+                Submit Quiz
+            </button>
+            <p style="margin-top: 15px; color: #666;">
+                Please answer all questions before submitting.
+            </p>
+        </div>
+    </div>
+
+    <a href="/admin" class="admin-link">Admin</a>
+
+    <script>
+        const answers = {};
+        const totalQuestions = {{ quiz_data.questions|length }};
+        let answeredCount = 0;
+
+        function selectOption(questionId, optionIndex) {
+            // Clear previous selections for this question
+            const options = document.querySelectorAll(`[id^="option-${questionId}-"]`);
+            options.forEach(opt => opt.classList.remove('selected'));
+            
+            // Select new option
+            document.getElementById(`option-${questionId}-${optionIndex}`).classList.add('selected');
+            
+            // Save answer
+            const wasAnswered = answers.hasOwnProperty(questionId);
+            answers[questionId] = optionIndex;
+            
+            if (!wasAnswered) {
+                answeredCount++;
+            }
+            
+            updateProgress();
+        }
+
+        function saveTextAnswer(questionId, value) {
+            const wasAnswered = answers.hasOwnProperty(questionId) && answers[questionId];
+            answers[questionId] = value;
+            
+            if (!wasAnswered && value.trim()) {
+                answeredCount++;
+            } else if (wasAnswered && !value.trim()) {
+                answeredCount--;
+            }
+            
+            updateProgress();
+        }
+
+        function updateProgress() {
+            const percentage = (answeredCount / totalQuestions) * 100;
+            document.getElementById('progress-fill').style.width = percentage + '%';
+            document.getElementById('progress-text').textContent = 
+                `${answeredCount} of ${totalQuestions} questions answered`;
+            
+            const submitBtn = document.getElementById('submit-btn');
+            if (answeredCount === totalQuestions) {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Submit Quiz';
+                submitBtn.style.background = '#28a745';
+            } else {
+                submitBtn.disabled = true;
+                submitBtn.textContent = `Submit Quiz (${totalQuestions - answeredCount} remaining)`;
+                submitBtn.style.background = '#6c757d';
+            }
+        }
+
+        function submitQuiz() {
+            const candidateName = document.getElementById('candidate-name').value.trim();
+            
+            if (!candidateName) {
+                alert('Please enter your name before submitting.');
+                document.getElementById('candidate-name').focus();
+                return;
+            }
+
+            if (answeredCount < totalQuestions) {
+                alert('Please answer all questions before submitting.');
+                return;
+            }
+
+            if (!confirm('Are you sure you want to submit your quiz? You cannot change your answers after submission.')) {
+                return;
+            }
+
+            const submitBtn = document.getElementById('submit-btn');
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Submitting...';
+
+            fetch('/submit_quiz', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    candidate_name: candidateName,
+                    answers: answers
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert(`Quiz submitted successfully!\n\nYour Score: ${data.score}/${data.total} (${data.percentage}%)\n\nSubmission ID: ${data.submission_id}`);
+                    
+                    // Disable all inputs
+                    document.querySelectorAll('.option, .text-input, #candidate-name').forEach(el => {
+                        el.style.pointerEvents = 'none';
+                        el.style.opacity = '0.6';
+                    });
+                    
+                    submitBtn.textContent = 'Quiz Submitted';
+                    submitBtn.style.background = '#6c757d';
+                } else {
+                    alert('Error submitting quiz: ' + data.error);
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Submit Quiz';
+                }
+            })
+            .catch(error => {
+                alert('Error submitting quiz: ' + error.message);
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Submit Quiz';
+            });
+        }
+
+        // Initialize progress
+        updateProgress();
+    </script>
+</body>
+</html>
