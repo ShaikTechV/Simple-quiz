@@ -258,9 +258,16 @@ QUIZ_DATA = {
         },
         {
             "id": 25,
-            "question": "Calculate the Proprietary Ratio from the Balance Sheet Data: Equity Share Rs.500,000, Pref. Shares Rs.200,000, General Reserve Rs.300,000, Secured Loan Rs.500,000, Creditors Rs.500,000, Total Assets Rs.2,000,000. Enter as decimal (e.g., 0.5):",
+            "question": "Based on the following Balance Sheet Data, calculate ALL THREE ratios:\n\n• Equity Share: Rs. 500,000\n• Pref. Shares: Rs. 200,000\n• General Reserve: Rs. 300,000\n• Secured Loan: Rs. 500,000\n• Creditors: Rs. 500,000\n• Total Assets: Rs. 2,000,000\n\ni) What is the Proprietary Ratio? (Enter as decimal, e.g., 0.5)\nii) What is the Debt Equity Ratio? (Enter as decimal, e.g., 1.0)\niii) What is the Capital Gearing Ratio? (Enter as decimal, e.g., 0.5)",
             "type": "text_input",
-            "correct_answers": ["0.5", "50%", "50", "0.50"]
+            "correct_answers": [
+                "proprietary: 0.5, debt equity: 1.0, capital gearing: 0.5",
+                "0.5, 1.0, 0.5",
+                "0.5 1.0 0.5",
+                "proprietary 0.5 debt equity 1.0 capital gearing 0.5",
+                "i) 0.5 ii) 1.0 iii) 0.5"
+            ],
+            "explanation": "Proprietary Ratio = Owner's Equity / Total Assets = (500,000 + 200,000 + 300,000) / 2,000,000 = 0.5\nDebt Equity Ratio = Total Debt / Owner's Equity = (500,000 + 500,000) / 1,000,000 = 1.0\nCapital Gearing Ratio = Fixed Interest Securities / Owner's Equity = 500,000 / 1,000,000 = 0.5"
         }
     ]
 }
@@ -276,6 +283,8 @@ def submit_quiz():
         answers = data.get('answers', {})
         candidate_name = data.get('candidate_name', 'Anonymous')
         time_forced = data.get('time_forced', False)
+        focus_warnings = data.get('focus_warnings', 0)
+        time_elapsed = data.get('time_elapsed', 0)
         
         # Calculate score
         score = 0
@@ -292,10 +301,27 @@ def submit_quiz():
                 is_correct = False
                 if user_answer:
                     user_answer_clean = str(user_answer).strip().lower()
-                    for correct in correct_answers:
-                        if user_answer_clean == str(correct).strip().lower():
+                    
+                    # For Question 25 (multi-part), check if it contains the key numbers
+                    if question['id'] == 25:
+                        # Expected answers: Proprietary=0.5, Debt Equity=0.5, Capital Gearing=0.875
+                        answer_lower = user_answer_clean.replace('%', '').replace(',', ' ').replace(':', ' ')
+                        
+                        # Simple approach: look for the key values we expect
+                        # Should contain 0.5 (twice) and 0.875 (once)
+                        has_half = ('0.5' in answer_lower or '.5' in answer_lower or '50' in answer_lower)
+                        has_capital = ('0.875' in answer_lower or '87.5' in answer_lower or '.875' in answer_lower)
+                        
+                        # Accept if they have both key values mentioned
+                        # (being lenient since the exact format may vary)
+                        if has_half and has_capital:
                             is_correct = True
-                            break
+                    else:
+                        # Regular text answer checking
+                        for correct in correct_answers:
+                            if user_answer_clean == str(correct).strip().lower():
+                                is_correct = True
+                                break
                 
                 if is_correct:
                     score += 1
@@ -305,7 +331,8 @@ def submit_quiz():
                     'question': question['question'],
                     'user_answer': user_answer,
                     'correct_answers': correct_answers,
-                    'is_correct': is_correct
+                    'is_correct': is_correct,
+                    'explanation': question.get('explanation', '')
                 })
             else:
                 # Handle multiple choice
@@ -333,7 +360,7 @@ def submit_quiz():
                     'is_correct': is_correct
                 })
         
-        # Store response
+        # Store response with anti-cheat metrics
         response_data = {
             'submission_id': len(quiz_responses) + 1,
             'candidate_name': candidate_name,
@@ -344,13 +371,17 @@ def submit_quiz():
             'answers': answers,
             'detailed_results': detailed_results,
             'time_forced': time_forced,
-            'questions_answered': len([a for a in answers.values() if a != -1])
+            'time_elapsed_seconds': time_elapsed,
+            'time_elapsed_minutes': round(time_elapsed / 60, 1),
+            'focus_warnings': focus_warnings,
+            'questions_answered': len([a for a in answers.values() if a != -1 and a != ""])
         }
         
         quiz_responses.append(response_data)
         
         submission_type = "TIME EXPIRED" if time_forced else "MANUAL"
-        print(f"✅ QUIZ SUBMITTED ({submission_type}): {candidate_name} - Score: {score}/{total} - Answered: {response_data['questions_answered']}/{total}")
+        focus_note = f" | Focus Warnings: {focus_warnings}" if focus_warnings > 0 else ""
+        print(f"✅ QUIZ SUBMITTED ({submission_type}): {candidate_name} - Score: {score}/{total} - Time: {round(time_elapsed/60, 1)}min{focus_note}")
         
         return jsonify({
             'success': True,
