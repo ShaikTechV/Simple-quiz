@@ -275,6 +275,7 @@ def submit_quiz():
         data = request.json
         answers = data.get('answers', {})
         candidate_name = data.get('candidate_name', 'Anonymous')
+        time_forced = data.get('time_forced', False)
         
         # Calculate score
         score = 0
@@ -341,12 +342,15 @@ def submit_quiz():
             'total': total,
             'percentage': round((score/total)*100, 1),
             'answers': answers,
-            'detailed_results': detailed_results
+            'detailed_results': detailed_results,
+            'time_forced': time_forced,
+            'questions_answered': len([a for a in answers.values() if a != -1])
         }
         
         quiz_responses.append(response_data)
         
-        print(f"✅ QUIZ SUBMITTED: {candidate_name} - Score: {score}/{total}")
+        submission_type = "TIME EXPIRED" if time_forced else "MANUAL"
+        print(f"✅ QUIZ SUBMITTED ({submission_type}): {candidate_name} - Score: {score}/{total} - Answered: {response_data['questions_answered']}/{total}")
         
         return jsonify({
             'success': True,
@@ -362,12 +366,42 @@ def submit_quiz():
 
 @app.route('/admin')
 def admin():
-    """Admin page to review all quiz responses"""
+    """Protected admin page to review all quiz responses"""
+    # Simple protection - check for admin password in URL or session
+    admin_key = request.args.get('key')
+    if admin_key != 'admin123':  # Change this to your preferred password
+        return '''
+        <html><body style="font-family: Arial; text-align: center; padding: 50px;">
+        <h2>🔒 Admin Access Required</h2>
+        <p>This page is for administrators only.</p>
+        <form method="GET">
+            <input type="password" name="key" placeholder="Enter admin password" style="padding: 10px; font-size: 16px;">
+            <button type="submit" style="padding: 10px 20px; font-size: 16px; background: #007bff; color: white; border: none; border-radius: 5px;">Access Admin</button>
+        </form>
+        <p><a href="/">← Back to Quiz</a></p>
+        </body></html>
+        '''
+    
     return render_template('admin_simple.html', responses=quiz_responses)
 
 @app.route('/response/<int:submission_id>')
 def view_response(submission_id):
-    """View detailed response for a specific submission"""
+    """Protected view detailed response for a specific submission"""
+    # Simple protection - check for admin password
+    admin_key = request.args.get('key')
+    if admin_key != 'admin123':  # Change this to your preferred password
+        return '''
+        <html><body style="font-family: Arial; text-align: center; padding: 50px;">
+        <h2>🔒 Admin Access Required</h2>
+        <p>This page is for administrators only.</p>
+        <form method="GET">
+            <input type="password" name="key" placeholder="Enter admin password" style="padding: 10px; font-size: 16px;">
+            <button type="submit" style="padding: 10px 20px; font-size: 16px; background: #007bff; color: white; border: none; border-radius: 5px;">Access Details</button>
+        </form>
+        <p><a href="/">← Back to Quiz</a></p>
+        </body></html>
+        '''
+    
     response = None
     for r in quiz_responses:
         if r['submission_id'] == submission_id:
