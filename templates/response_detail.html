@@ -45,6 +45,12 @@
                 <p><strong>Submission ID:</strong> #{{ response.submission_id }}</p>
                 <p><strong>Submitted:</strong> {{ response.submission_time[:19] }}</p>
                 <p><strong>Total Questions:</strong> {{ response.total }}</p>
+                <p><strong>Time Taken:</strong> {{ response.get('time_elapsed_minutes', 'N/A') }} minutes</p>
+                {% if response.get('focus_warnings', 0) > 0 %}
+                <p><strong>Focus Warnings:</strong> <span style="color: #dc3545;">{{ response.get('focus_warnings') }} ⚠️</span></p>
+                {% else %}
+                <p><strong>Focus Warnings:</strong> <span style="color: #28a745;">None ✅</span></p>
+                {% endif %}
             </div>
             <div class="summary-right">
                 <div class="score-large">{{ response.score }}/{{ response.total }}</div>
@@ -86,10 +92,10 @@
                 <!-- Text Input Question -->
                 <div class="answer-section">
                     <div class="answer-label">Your Answer:</div>
-                    <div class="user-answer">{{ result.user_answer or 'No answer provided' }}</div>
+                    <div class="user-answer" style="white-space: pre-wrap;">{{ result.user_answer or 'No answer provided' }}</div>
                     
-                    <div class="answer-label">Accepted Answers:</div>
-                    <div class="correct-answer">{{ result.correct_answers | join(', ') }}</div>
+                    <div class="answer-label">Expected Answer Format:</div>
+                    <div class="correct-answer" style="white-space: pre-wrap;">{{ result.get('explanation', result.correct_answers | join(', ')) }}</div>
                 </div>
             {% endif %}
         </div>
