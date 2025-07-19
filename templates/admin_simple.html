@@ -56,10 +56,10 @@
             </div>
             <div class="stat-box">
                 <div class="stat-number">
-                    {% set focus_violations = responses | map(attribute='focus_warnings') | map('default', 0) | list %}
-                    {{ focus_violations | select('>', 0) | list | length }}
+                    {% set warning_violations = responses | map(attribute='warnings_shown') | map('default', 0) | list %}
+                    {{ warning_violations | select('>', 0) | list | length }}
                 </div>
-                <div class="stat-label">Focus Violations</div>
+                <div class="stat-label">Warning Violations</div>
             </div>
         </div>
 
@@ -75,7 +75,7 @@
                     <th>Percentage</th>
                     <th>Answered</th>
                     <th>Time Taken</th>
-                    <th>Focus Warnings</th>
+                    <th>Warnings</th>
                     <th>Status</th>
                     <th>Actions</th>
                 </tr>
@@ -101,8 +101,9 @@
                     <td>{{ response.get('questions_answered', response.total) }}/{{ response.total }}</td>
                     <td>{{ response.get('time_elapsed_minutes', 'N/A') }} min</td>
                     <td>
-                        {% if response.get('focus_warnings', 0) > 0 %}
-                            <span style="color: #dc3545; font-weight: bold;">{{ response.get('focus_warnings') }} ⚠️</span>
+                        {% if response.get('warnings_shown', 0) > 0 %}
+                            <span style="color: #dc3545; font-weight: bold;">{{ response.get('warnings_shown', 0) }} ⚠️</span>
+                            <br><small style="color: #666;">({{ response.get('focus_warnings', 0) }} blurs)</small>
                         {% else %}
                             <span style="color: #28a745;">0 ✅</span>
                         {% endif %}
