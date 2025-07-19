@@ -25,8 +25,10 @@
         .progress { margin: 20px 0; }
         .progress-bar { width: 100%; height: 10px; background: #e9ecef; border-radius: 5px; overflow: hidden; }
         .progress-fill { height: 100%; background: #007bff; transition: width 0.3s; }
-        .admin-link { position: fixed; bottom: 20px; right: 20px; background: #dc3545; color: white; padding: 10px 15px; border-radius: 5px; text-decoration: none; }
-        .admin-link:hover { background: #c82333; color: white; text-decoration: none; }
+        .timer { position: fixed; top: 20px; right: 20px; background: #dc3545; color: white; padding: 15px 20px; border-radius: 8px; font-weight: bold; z-index: 1000; font-size: 18px; }
+        .timer.warning { background: #fd7e14; animation: pulse 1s infinite; }
+        .timer.critical { background: #dc3545; animation: pulse 0.5s infinite; }
+        @keyframes pulse { 0%, 50% { opacity: 1; } 51%, 100% { opacity: 0.7; } }
     </style>
 </head>
 <body>
@@ -34,7 +36,7 @@
         <div class="header">
             <h1 class="title">{{ quiz_data.title }}</h1>
             <p class="subtitle">{{ quiz_data.description }}</p>
-            <p><strong>Total Questions:</strong> {{ quiz_data.questions|length }}</p>
+            <p><strong>Total Questions:</strong> {{ quiz_data.questions|length }} | <strong>Time Limit:</strong> 45 minutes</p>
         </div>
 
         <div class="candidate-info">
@@ -77,14 +79,49 @@
                 Submit Quiz
             </button>
             <p style="margin-top: 15px; color: #666;">
-                Please answer all questions before submitting.
+                You can submit anytime. Unanswered questions will be marked as incorrect.
             </p>
         </div>
     </div>
 
-    <a href="/admin" class="admin-link">Admin</a>
+    <div class="timer" id="timer">45:00</div>
 
     <script>
+        // Timer functionality - 45 minutes (2700 seconds)
+        let timeLeft = 2700; // 45 minutes in seconds
+        let timerInterval;
+
+        function updateTimer() {
+            const minutes = Math.floor(timeLeft / 60);
+            const seconds = timeLeft % 60;
+            const display = minutes + ':' + (seconds < 10 ? '0' : '') + seconds;
+            
+            const timerElement = document.getElementById('timer');
+            timerElement.textContent = 'Time: ' + display;
+            
+            // Change timer color based on time remaining
+            if (timeLeft <= 300) { // Last 5 minutes - critical
+                timerElement.className = 'timer critical';
+            } else if (timeLeft <= 600) { // Last 10 minutes - warning
+                timerElement.className = 'timer warning';
+            } else {
+                timerElement.className = 'timer';
+            }
+            
+            if (timeLeft <= 0) {
+                clearInterval(timerInterval);
+                alert('⏰ Time is up! Your quiz will be submitted automatically.');
+                submitQuiz(true); // Force submit
+                return;
+            }
+            
+            timeLeft--;
+        }
+
+        // Start the timer
+        timerInterval = setInterval(updateTimer, 1000);
+        updateTimer(); // Initial call
+
         const answers = {};
         const totalQuestions = {{ quiz_data.questions|length }};
         let answeredCount = 0;
@@ -139,40 +176,51 @@
             }
         }
 
-        function submitQuiz() {
+        function submitQuiz(forceSubmit = false) {
             const candidateName = document.getElementById('candidate-name').value.trim();
             
-            if (!candidateName) {
-                alert('Please enter your name before submitting.');
-                document.getElementById('candidate-name').focus();
-                return;
+            if (!forceSubmit) {
+                if (!candidateName) {
+                    alert('Please enter your name before submitting.');
+                    document.getElementById('candidate-name').focus();
+                    return;
+                }
+
+                if (answeredCount < totalQuestions) {
+                    if (!confirm(`You have only answered ${answeredCount} out of ${totalQuestions} questions. Are you sure you want to submit?`)) {
+                        return;
+                    }
+                }
+
+                if (!confirm('Are you sure you want to submit your quiz? You cannot change your answers after submission.')) {
+                    return;
+                }
             }
 
-            if (answeredCount < totalQuestions) {
-                alert('Please answer all questions before submitting.');
-                return;
-            }
-
-            if (!confirm('Are you sure you want to submit your quiz? You cannot change your answers after submission.')) {
-                return;
-            }
+            // Stop the timer
+            clearInterval(timerInterval);
 
             const submitBtn = document.getElementById('submit-btn');
             submitBtn.disabled = true;
-            submitBtn.textContent = 'Submitting...';
+            submitBtn.textContent = forceSubmit ? 'Time Up - Submitting...' : 'Submitting...';
 
             fetch('/submit_quiz', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    candidate_name: candidateName,
-                    answers: answers
+                    candidate_name: candidateName || 'Anonymous',
+                    answers: answers,
+                    time_forced: forceSubmit
                 })
             })
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    alert(`Quiz submitted successfully!\n\nYour Score: ${data.score}/${data.total} (${data.percentage}%)\n\nSubmission ID: ${data.submission_id}`);
+                    const message = forceSubmit 
+                        ? `⏰ Time expired! Quiz submitted automatically.\n\nYour Score: ${data.score}/${data.total} (${data.percentage}%)\n\nSubmission ID: ${data.submission_id}`
+                        : `Quiz submitted successfully!\n\nYour Score: ${data.score}/${data.total} (${data.percentage}%)\n\nSubmission ID: ${data.submission_id}`;
+                    
+                    alert(message);
                     
                     // Disable all inputs
                     document.querySelectorAll('.option, .text-input, #candidate-name').forEach(el => {
@@ -182,16 +230,27 @@
                     
                     submitBtn.textContent = 'Quiz Submitted';
                     submitBtn.style.background = '#6c757d';
+                    
+                    // Hide timer
+                    document.getElementById('timer').style.display = 'none';
                 } else {
                     alert('Error submitting quiz: ' + data.error);
                     submitBtn.disabled = false;
                     submitBtn.textContent = 'Submit Quiz';
+                    // Restart timer if not force submit
+                    if (!forceSubmit) {
+                        timerInterval = setInterval(updateTimer, 1000);
+                    }
                 }
             })
             .catch(error => {
                 alert('Error submitting quiz: ' + error.message);
                 submitBtn.disabled = false;
                 submitBtn.textContent = 'Submit Quiz';
+                // Restart timer if not force submit
+                if (!forceSubmit) {
+                    timerInterval = setInterval(updateTimer, 1000);
+                }
             });
         }
 
