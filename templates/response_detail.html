@@ -46,8 +46,8 @@
                 <p><strong>Submitted:</strong> {{ response.submission_time[:19] }}</p>
                 <p><strong>Total Questions:</strong> {{ response.total }}</p>
                 <p><strong>Time Taken:</strong> {{ response.get('time_elapsed_minutes', 'N/A') }} minutes</p>
-                {% if response.get('focus_warnings', 0) > 0 %}
-                <p><strong>Focus Warnings:</strong> <span style="color: #dc3545;">{{ response.get('focus_warnings') }} ⚠️</span></p>
+                {% if response.get('warnings_shown', 0) > 0 %}
+                <p><strong>Warnings Shown:</strong> <span style="color: #dc3545;">{{ response.get('warnings_shown') }} ⚠️</span> ({{ response.get('focus_warnings', 0) }} total blur events)</p>
                 {% else %}
                 <p><strong>Focus Warnings:</strong> <span style="color: #28a745;">None ✅</span></p>
                 {% endif %}
