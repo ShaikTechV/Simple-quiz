@@ -71,6 +71,8 @@
                     <th>Submission Time</th>
                     <th>Score</th>
                     <th>Percentage</th>
+                    <th>Answered</th>
+                    <th>Status</th>
                     <th>Actions</th>
                 </tr>
             </thead>
@@ -92,8 +94,16 @@
                             {{ response.percentage }}%
                         </span>
                     </td>
+                    <td>{{ response.get('questions_answered', response.total) }}/{{ response.total }}</td>
                     <td>
-                        <a href="/response/{{ response.submission_id }}" class="view-btn">📋 View Details</a>
+                        {% if response.get('time_forced') %}
+                            <span style="color: #dc3545;">⏰ Time Expired</span>
+                        {% else %}
+                            <span style="color: #28a745;">✅ Manual</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <a href="/response/{{ response.submission_id }}?key=admin123" class="view-btn">📋 View Details</a>
                     </td>
                 </tr>
                 {% endfor %}
