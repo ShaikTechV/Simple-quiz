@@ -1,453 +1,320 @@
-"""
-Simple Quiz Platform - Direct Quiz Access with Response Recording
-"""
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{{ quiz_data.title }}</title>
+    <style>
+        body { font-family: Arial, sans-serif; background: #f5f5f5; margin: 0; padding: 20px; }
+        .container { max-width: 900px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
+        .header { text-align: center; margin-bottom: 30px; }
+        .title { color: #333; font-size: 28px; margin-bottom: 10px; }
+        .subtitle { color: #666; font-size: 16px; margin-bottom: 20px; }
+        .candidate-info { background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 30px; }
+        .candidate-info input { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 5px; font-size: 16px; }
+        .question { margin: 20px 0; padding: 20px; border: 1px solid #ddd; border-radius: 8px; background: #f8f9fa; }
+        .question-title { font-size: 18px; font-weight: bold; margin-bottom: 15px; color: #333; }
+        .options { margin: 15px 0; }
+        .option { margin: 10px 0; padding: 12px; border: 2px solid #ddd; border-radius: 5px; cursor: pointer; transition: all 0.3s; }
+        .option:hover { border-color: #007bff; background: #f0f8ff; }
+        .option.selected { border-color: #007bff; background: #007bff; color: white; }
+        .text-input { width: 100%; padding: 12px; border: 2px solid #ddd; border-radius: 5px; font-size: 16px; font-family: Arial, sans-serif; }
+        .text-input:focus { border-color: #007bff; outline: none; }
+        .submit-section { text-align: center; margin-top: 40px; padding: 20px; background: #f8f9fa; border-radius: 8px; }
+        .submit-btn { background: #28a745; color: white; padding: 15px 40px; border: none; border-radius: 5px; font-size: 18px; cursor: pointer; }
+        .submit-btn:hover { background: #218838; }
+        .submit-btn:disabled { background: #6c757d; cursor: not-allowed; }
+        .progress { margin: 20px 0; }
+        .progress-bar { width: 100%; height: 10px; background: #e9ecef; border-radius: 5px; overflow: hidden; }
+        .progress-fill { height: 100%; background: #007bff; transition: width 0.3s; }
+        .timer { position: fixed; top: 20px; right: 20px; background: #dc3545; color: white; padding: 15px 20px; border-radius: 8px; font-weight: bold; z-index: 1000; font-size: 18px; }
+        .timer.warning { background: #fd7e14; animation: pulse 1s infinite; }
+        .timer.critical { background: #dc3545; animation: pulse 0.5s infinite; }
+        @keyframes pulse { 0%, 50% { opacity: 1; } 51%, 100% { opacity: 0.7; } }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1 class="title">{{ quiz_data.title }}</h1>
+            <p class="subtitle">{{ quiz_data.description }}</p>
+            <p><strong>Total Questions:</strong> {{ quiz_data.questions|length }} | <strong>Time Limit:</strong> 45 minutes</p>
+        </div>
 
-from flask import Flask, render_template, request, jsonify
-import json
-import time
-from datetime import datetime
-import secrets
-import os
-import random
-import string
+        <div class="candidate-info">
+            <label for="candidate-name"><strong>Your Name:</strong></label>
+            <input type="text" id="candidate-name" placeholder="Enter your full name" required>
+        </div>
 
-app = Flask(__name__)
-app.secret_key = secrets.token_hex(16)
+        <div class="progress">
+            <div class="progress-bar">
+                <div class="progress-fill" id="progress-fill" style="width: 0%"></div>
+            </div>
+            <p id="progress-text">0 of {{ quiz_data.questions|length }} questions answered</p>
+        </div>
 
-# In-memory storage for quiz responses
-quiz_responses = []
+        <div id="questions">
+            {% for question in quiz_data.questions %}
+            <div class="question">
+                <div class="question-title">Q{{ loop.index }}: {{ question.question|replace('\n', '<br>')|safe }}</div>
+                
+                {% if question.get('type') == 'text_input' %}
+                    {% if question.id == 25 %}
+                        <textarea class="text-input" id="answer-{{ question.id }}" 
+                               placeholder="Calculate and enter all three ratios:&#10;i) Proprietary Ratio: [your calculation]&#10;ii) Debt Equity Ratio: [your calculation]&#10;iii) Capital Gearing Ratio: [your calculation]" 
+                               rows="4"
+                               onchange="saveTextAnswer({{ question.id }}, this.value)"></textarea>
+                        <p style="font-size: 14px; color: #666; margin-top: 10px;">
+                            <strong>Hint:</strong> Calculate each ratio as a decimal (e.g., 0.5) and clearly label which is which.
+                        </p>
+                    {% else %}
+                        <input type="text" class="text-input" id="answer-{{ question.id }}" 
+                               placeholder="Enter your answer here..." 
+                               onchange="saveTextAnswer({{ question.id }}, this.value)">
+                    {% endif %}
+                {% else %}
+                    <div class="options">
+                        {% for option in question.options %}
+                        <div class="option" onclick="selectOption({{ question.id }}, {{ loop.index0 }})" 
+                             id="option-{{ question.id }}-{{ loop.index0 }}">
+                            {{ option }}
+                        </div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
 
-# Quiz data - All 25 questions
-QUIZ_DATA = {
-    "title": "Accounting & Finance Assessment",
-    "description": "Professional interview evaluation",
-    "questions": [
-        {
-            "id": 1,
-            "question": "Out of following which is not capital item?",
-            "options": [
-                "(a) Computer set purchased",
-                "(b) Freight charges incurred for purchase of machinery", 
-                "(c) Compensation paid to employees who are retrenched",
-                "(d) Installed family planning center"
-            ],
-            "correct": 2
-        },
-        {
-            "id": 2,
-            "question": "Salary paid to Mohan is debited to Mohan A/c. This error is",
-            "options": [
-                "(a) Principle error",
-                "(b) Compensation error", 
-                "(c) Omission error",
-                "(d) No error at all"
-            ],
-            "correct": 0
-        },
-        {
-            "id": 3,
-            "question": "XYZ Co. failed to agree and the difference was put into suspense account. Pass the rectifying entry:",
-            "options": [
-                "(a) Dr. Suspense A/c. 3000, Cr. Discount received A/c. 2000, Cr. Discount allowed a/c. 1000",
-                "(b) Dr. Discount received A/c. 2000, Dr. Discount allowed a/c. 1000, Cr. Suspense A/c. 3000",
-                "(c) No entry is required", 
-                "(d) Any entry a or b"
-            ],
-            "correct": 0
-        },
-        {
-            "id": 4,
-            "question": "Calculate the operating profit: Sales Rs. 10,00,000, Opening stock Rs. 1,00,000, Purchases Rs. 6,50,000, Closing stock Rs. 1,50,000, Office rent Rs. 45,000, Salaries Rs. 90,000",
-            "options": [
-                "(a) Rs. 4,65,000",
-                "(b) Rs. 5,50,000",
-                "(c) Rs. 4,30,000",
-                "(d) Rs. 4,75,000"
-            ],
-            "correct": 0
-        },
-        {
-            "id": 5,
-            "question": "Salaries due for the month of March will appear",
-            "options": [
-                "(a) On the receipt side of the cash book",
-                "(b) On the payment side of the cash book",
-                "(c) As a contra entry",
-                "(d) Nowhere in cash book"
-            ],
-            "correct": 3
-        },
-        {
-            "id": 6,
-            "question": "From the following information, determine amounts to be transferred to Income & Expenditure A/c: Subscription received Rs. 5,000, Subscription outstanding Rs. 2,500",
-            "options": [
-                "(a) Rs. 7,500",
-                "(b) Rs. 2,500", 
-                "(c) Rs. 5,000",
-                "(d) Rs. 2,000"
-            ],
-            "correct": 0
-        },
-        {
-            "id": 7,
-            "question": "Opening balance: Proprietor's A/c. Rs. 50,000, Current year profit Rs. 4,50,000, Drawings Rs. 1,00,000. Calculate closing balance of Proprietor's A/c.",
-            "options": [
-                "(a) Rs. 4,00,000",
-                "(b) Rs. 5,00,000",
-                "(c) Rs. 6,00,000", 
-                "(d) Rs. 7,00,000"
-            ],
-            "correct": 0
-        },
-        {
-            "id": 8,
-            "question": "Goods worth Rs.18,800 are destroyed by fire and the insurance company admits the claim for Rs.15,000. Loss by fire account will be",
-            "options": [
-                "(a) debited by Rs.18,800",
-                "(b) debited by Rs.3,800",
-                "(c) credited by Rs.18,800",
-                "(d) credited by Rs.3,800"
-            ],
-            "correct": 1
-        },
-        {
-            "id": 9,
-            "question": "Which one is correct?",
-            "options": [
-                "(a) Assets + Liabilities = Owner's equity",
-                "(b) Assets – Liabilities = Owner's equity",
-                "(c) Owner's equity + Assets = Liability",
-                "(d) None of the above"
-            ],
-            "correct": 1
-        },
-        {
-            "id": 10,
-            "question": "Advances given to Govt. Authority is shown as",
-            "options": [
-                "(a) Current assets",
-                "(b) Fixed assets",
-                "(c) Liability", 
-                "(d) Capital"
-            ],
-            "correct": 0
-        },
-        {
-            "id": 11,
-            "question": "Health Club has 1,000 members. Annual fees for each member Rs.1,000. Rs.2 L received in advance, Rs.1 L in arrears. Amount to be credited to Income & Expenditure A/c:",
-            "options": [
-                "(a) Rs.8 L",
-                "(b) Rs.9 L",
-                "(c) Rs.10 L",
-                "(d) Rs.12 L"
-            ],
-            "correct": 1
-        },
-        {
-            "id": 12,
-            "question": "When sales Rs.300000, Purchase Rs.200000, Opening stock Rs.10000, Closing stock Rs.40000, what is gross profit?",
-            "options": [
-                "(a) Rs. 130,000",
-                "(b) Rs. 100,000",
-                "(c) Rs. 170,000",
-                "(d) Rs. 60,000"
-            ],
-            "correct": 0
-        },
-        {
-            "id": 13,
-            "question": "From the information, Vimal Ltd received from its branch: Goods sent to branch Rs. 5,00,000, Cash received from branch Rs. 2,00,000, Expenses of branch Rs. 1,00,000, Closing stock at branch Rs. 1,00,000. Branch adjustment account will show:",
-            "options": [
-                "(a) Rs. 2,00,000",
-                "(b) Rs. 3,00,000", 
-                "(c) Rs. 1,00,000",
-                "(d) Rs. 4,00,000"
-            ],
-            "correct": 0
-        },
-        {
-            "id": 14,
-            "question": "What amount will be credited in income expenditure account for subscription: Subscription received Rs.10 L, Subscription due for previous year Rs.1 L, Subscription due for current year Rs.3 L, Subscription received in advance Rs.1 L",
-            "options": [
-                "(a) Rs. 12 L",
-                "(b) Rs. 13 L",
-                "(c) Rs. 14 L",
-                "(d) Rs. 11 L"
-            ],
-            "correct": 0
-        },
-        {
-            "id": 15,
-            "question": "Following information provided by ABC Club: Subscription received current year Rs.5 L, Subscription outstanding beginning Rs.2 L, Subscription outstanding end Rs.1 L, Subscription received in advance beginning Rs.1 L, Subscription received in advance end Rs.2 L. Amount to be credited:",
-            "options": [
-                "(a) Rs. 4 L",
-                "(b) Rs. 5 L",
-                "(c) Rs. 3 L", 
-                "(d) Rs. 9 L"
-            ],
-            "correct": 0
-        },
-        {
-            "id": 16,
-            "question": "Drawing decrease the assets and decrease the liability. Evaluate this statement as True or False.",
-            "options": ["True", "False"],
-            "correct": 1
-        },
-        {
-            "id": 17,
-            "question": "A, B, C started joint venture. A brought rs.10000, B Rs.20000, C Rs.30000 and opened joint bank account. Rs.10000 will be credited in joint bank a/c. on the name of A. Evaluate this statement as True or False.",
-            "options": ["True", "False"],
-            "correct": 0
-        },
-        {
-            "id": 18,
-            "question": "It is true receipts and payment is like a cash book. Evaluate this statement as True or False.",
-            "options": ["True", "False"],
-            "correct": 0
-        },
-        {
-            "id": 19,
-            "question": "Cash discount is never recorded in the books of accounts. Evaluate this statement as True or False.",
-            "options": ["True", "False"],
-            "correct": 1
-        },
-        {
-            "id": 20,
-            "question": "The software development expenses for a company engaging in software business is capital expenses if it is for sale. Evaluate this statement as True or False.",
-            "options": ["True", "False"],
-            "correct": 1
-        },
-        {
-            "id": 21,
-            "question": "It is not compulsory to record all the business transaction in the books of accounts. Evaluate this statement as True or False.",
-            "options": ["True", "False"],
-            "correct": 1
-        },
-        {
-            "id": 22,
-            "question": "If person invest Rs.2,00,000 in our investment which pays 12% compounded annually. What will be the future value after 10 years?",
-            "options": [
-                "(a) Rs. 6,21,200",
-                "(b) Rs. 5,00,000",
-                "(c) Rs. 6,42,200",
-                "(d) Rs. 8,10,500"
-            ],
-            "correct": 0
-        },
-        {
-            "id": 23,
-            "question": "PAT of the project is Rs.50 Lac, initial investment is Rs.500 Lac. What is the accounting rate of return (ARR)?",
-            "options": [
-                "(a) 5%",
-                "(b) 20%",
-                "(c) 10%",
-                "(d) 2%"
-            ],
-            "correct": 2
-        },
-        {
-            "id": 24,
-            "question": "Which of the following is a solvency ratio?",
-            "options": [
-                "(a) Liquidity Ratio",
-                "(b) Operating Ratio",
-                "(c) Capital Gearing Ratio",
-                "(d) Net Profit Ratio"
-            ],
-            "correct": 2
-        },
-        {
-            "id": 25,
-            "question": "Based on the following Balance Sheet Data, calculate ALL THREE ratios:\n\n• Equity Share: Rs. 500,000\n• Pref. Shares: Rs. 200,000\n• General Reserve: Rs. 300,000\n• Secured Loan: Rs. 500,000\n• Creditors: Rs. 500,000\n• Total Assets: Rs. 2,000,000\n\ni) What is the Proprietary Ratio? (Enter as decimal, e.g., 0.5)\nii) What is the Debt Equity Ratio? (Enter as decimal, e.g., 1.0)\niii) What is the Capital Gearing Ratio? (Enter as decimal, e.g., 0.5)",
-            "type": "text_input",
-            "correct_answers": [
-                "proprietary: 0.5, debt equity: 1.0, capital gearing: 0.5",
-                "0.5, 1.0, 0.5",
-                "0.5 1.0 0.5",
-                "proprietary 0.5 debt equity 1.0 capital gearing 0.5",
-                "i) 0.5 ii) 1.0 iii) 0.5"
-            ],
-            "explanation": "Proprietary Ratio = Owner's Equity / Total Assets = (500,000 + 200,000 + 300,000) / 2,000,000 = 0.5\nDebt Equity Ratio = Total Debt / Owner's Equity = (500,000 + 500,000) / 1,000,000 = 1.0\nCapital Gearing Ratio = Fixed Interest Securities / Owner's Equity = 500,000 / 1,000,000 = 0.5"
-        }
-    ]
-}
+        <div class="submit-section">
+            <button class="submit-btn" id="submit-btn" onclick="submitQuiz()" disabled>
+                Submit Quiz
+            </button>
+            <p style="margin-top: 15px; color: #666;">
+                You can submit anytime. Unanswered questions will be marked as incorrect.
+            </p>
+        </div>
+    </div>
 
-@app.route('/')
-def home():
-    return render_template('simple_quiz.html', quiz_data=QUIZ_DATA)
+    <div class="timer" id="timer">45:00</div>
 
-@app.route('/submit_quiz', methods=['POST'])
-def submit_quiz():
-    try:
-        data = request.json
-        answers = data.get('answers', {})
-        candidate_name = data.get('candidate_name', 'Anonymous')
-        time_forced = data.get('time_forced', False)
-        focus_warnings = data.get('focus_warnings', 0)
-        time_elapsed = data.get('time_elapsed', 0)
-        
-        # Calculate score
-        score = 0
-        total = len(QUIZ_DATA['questions'])
-        detailed_results = []
-        
-        for question in QUIZ_DATA['questions']:
-            question_id = str(question['id'])
-            user_answer = answers.get(question_id, -1)
+    <script>
+        // Timer functionality - 45 minutes (2700 seconds) with window focus protection
+        let timeLeft = 2700; // 45 minutes in seconds
+        let timerInterval;
+        let startTime = Date.now();
+        let lastUpdateTime = Date.now();
+
+        function updateTimer() {
+            // Calculate actual elapsed time to prevent manipulation
+            const now = Date.now();
+            const actualElapsed = Math.floor((now - startTime) / 1000);
+            timeLeft = Math.max(0, 2700 - actualElapsed);
             
-            if question.get('type') == 'text_input':
-                # Handle text input
-                correct_answers = question.get('correct_answers', [])
-                is_correct = False
-                if user_answer:
-                    user_answer_clean = str(user_answer).strip().lower()
-                    
-                    # For Question 25 (multi-part), check if it contains the key numbers
-                    if question['id'] == 25:
-                        # Expected answers: Proprietary=0.5, Debt Equity=0.5, Capital Gearing=0.875
-                        answer_lower = user_answer_clean.replace('%', '').replace(',', ' ').replace(':', ' ')
-                        
-                        # Simple approach: look for the key values we expect
-                        # Should contain 0.5 (twice) and 0.875 (once)
-                        has_half = ('0.5' in answer_lower or '.5' in answer_lower or '50' in answer_lower)
-                        has_capital = ('0.875' in answer_lower or '87.5' in answer_lower or '.875' in answer_lower)
-                        
-                        # Accept if they have both key values mentioned
-                        # (being lenient since the exact format may vary)
-                        if has_half and has_capital:
-                            is_correct = True
-                    else:
-                        # Regular text answer checking
-                        for correct in correct_answers:
-                            if user_answer_clean == str(correct).strip().lower():
-                                is_correct = True
-                                break
-                
-                if is_correct:
-                    score += 1
-                    
-                detailed_results.append({
-                    'question_id': question['id'],
-                    'question': question['question'],
-                    'user_answer': user_answer,
-                    'correct_answers': correct_answers,
-                    'is_correct': is_correct,
-                    'explanation': question.get('explanation', '')
-                })
-            else:
-                # Handle multiple choice
-                is_correct = user_answer == question['correct']
-                if is_correct:
-                    score += 1
-                
-                user_answer_text = "Not answered"
-                correct_answer_text = "N/A"
-                
-                if user_answer >= 0 and user_answer < len(question['options']):
-                    user_answer_text = question['options'][user_answer]
-                
-                if question['correct'] >= 0 and question['correct'] < len(question['options']):
-                    correct_answer_text = question['options'][question['correct']]
-                
-                detailed_results.append({
-                    'question_id': question['id'],
-                    'question': question['question'],
-                    'options': question['options'],
-                    'user_answer': user_answer,
-                    'user_answer_text': user_answer_text,
-                    'correct_answer': question['correct'],
-                    'correct_answer_text': correct_answer_text,
-                    'is_correct': is_correct
-                })
-        
-        # Store response with anti-cheat metrics
-        response_data = {
-            'submission_id': len(quiz_responses) + 1,
-            'candidate_name': candidate_name,
-            'submission_time': datetime.now().isoformat(),
-            'score': score,
-            'total': total,
-            'percentage': round((score/total)*100, 1),
-            'answers': answers,
-            'detailed_results': detailed_results,
-            'time_forced': time_forced,
-            'time_elapsed_seconds': time_elapsed,
-            'time_elapsed_minutes': round(time_elapsed / 60, 1),
-            'focus_warnings': focus_warnings,
-            'questions_answered': len([a for a in answers.values() if a != -1 and a != ""])
+            const minutes = Math.floor(timeLeft / 60);
+            const seconds = timeLeft % 60;
+            const display = minutes + ':' + (seconds < 10 ? '0' : '') + seconds;
+            
+            const timerElement = document.getElementById('timer');
+            timerElement.textContent = 'Time: ' + display;
+            
+            // Change timer color based on time remaining
+            if (timeLeft <= 300) { // Last 5 minutes - critical
+                timerElement.className = 'timer critical';
+            } else if (timeLeft <= 600) { // Last 10 minutes - warning
+                timerElement.className = 'timer warning';
+            } else {
+                timerElement.className = 'timer';
+            }
+            
+            if (timeLeft <= 0) {
+                clearInterval(timerInterval);
+                alert('⏰ Time is up! Your quiz will be submitted automatically.');
+                submitQuiz(true); // Force submit
+                return;
+            }
+            
+            lastUpdateTime = now;
         }
-        
-        quiz_responses.append(response_data)
-        
-        submission_type = "TIME EXPIRED" if time_forced else "MANUAL"
-        focus_note = f" | Focus Warnings: {focus_warnings}" if focus_warnings > 0 else ""
-        print(f"✅ QUIZ SUBMITTED ({submission_type}): {candidate_name} - Score: {score}/{total} - Time: {round(time_elapsed/60, 1)}min{focus_note}")
-        
-        return jsonify({
-            'success': True,
-            'score': score,
-            'total': total,
-            'percentage': round((score/total)*100, 1),
-            'submission_id': response_data['submission_id']
-        })
-        
-    except Exception as e:
-        print(f"❌ ERROR submitting quiz: {str(e)}")
-        return jsonify({'success': False, 'error': str(e)})
 
-@app.route('/admin')
-def admin():
-    """Protected admin page to review all quiz responses"""
-    # Simple protection - check for admin password in URL or session
-    admin_key = request.args.get('key')
-    if admin_key != 'admin123':  # Change this to your preferred password
-        return '''
-        <html><body style="font-family: Arial; text-align: center; padding: 50px;">
-        <h2>🔒 Admin Access Required</h2>
-        <p>This page is for administrators only.</p>
-        <form method="GET">
-            <input type="password" name="key" placeholder="Enter admin password" style="padding: 10px; font-size: 16px;">
-            <button type="submit" style="padding: 10px 20px; font-size: 16px; background: #007bff; color: white; border: none; border-radius: 5px;">Access Admin</button>
-        </form>
-        <p><a href="/">← Back to Quiz</a></p>
-        </body></html>
-        '''
-    
-    return render_template('admin_simple.html', responses=quiz_responses)
+        // Anti-cheat: Detect when user switches windows/tabs and warn them
+        let windowFocused = true;
+        let focusWarnings = 0;
+        
+        window.addEventListener('blur', function() {
+            windowFocused = false;
+            focusWarnings++;
+            if (focusWarnings <= 3) {
+                setTimeout(() => {
+                    if (!windowFocused) {
+                        alert(`⚠️ Warning ${focusWarnings}/3: Please stay on the quiz tab. Timer continues running. Excessive tab switching may result in automatic submission.`);
+                    }
+                }, 2000);
+            } else {
+                // After 3 warnings, consider auto-submitting
+                setTimeout(() => {
+                    if (!windowFocused) {
+                        alert('❌ Too many tab switches detected. Quiz will be submitted automatically for security.');
+                        submitQuiz(true);
+                    }
+                }, 1000);
+            }
+        });
 
-@app.route('/response/<int:submission_id>')
-def view_response(submission_id):
-    """Protected view detailed response for a specific submission"""
-    # Simple protection - check for admin password
-    admin_key = request.args.get('key')
-    if admin_key != 'admin123':  # Change this to your preferred password
-        return '''
-        <html><body style="font-family: Arial; text-align: center; padding: 50px;">
-        <h2>🔒 Admin Access Required</h2>
-        <p>This page is for administrators only.</p>
-        <form method="GET">
-            <input type="password" name="key" placeholder="Enter admin password" style="padding: 10px; font-size: 16px;">
-            <button type="submit" style="padding: 10px 20px; font-size: 16px; background: #007bff; color: white; border: none; border-radius: 5px;">Access Details</button>
-        </form>
-        <p><a href="/">← Back to Quiz</a></p>
-        </body></html>
-        '''
-    
-    response = None
-    for r in quiz_responses:
-        if r['submission_id'] == submission_id:
-            response = r
-            break
-    
-    if not response:
-        return "Response not found", 404
-    
-    return render_template('response_detail.html', response=response)
+        window.addEventListener('focus', function() {
+            windowFocused = true;
+        });
 
-@app.route('/test')
-def test():
-    return f"✅ Quiz app working! Responses stored: {len(quiz_responses)} | Questions: {len(QUIZ_DATA['questions'])}"
+        // Start the timer with high-frequency updates to prevent manipulation
+        timerInterval = setInterval(updateTimer, 1000);
+        updateTimer(); // Initial call
 
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=False)
+        // Backup timer check every 5 seconds to ensure accuracy
+        setInterval(function() {
+            const now = Date.now();
+            const expectedTimeLeft = 2700 - Math.floor((now - startTime) / 1000);
+            
+            // If there's a significant discrepancy, correct it
+            if (Math.abs(timeLeft - expectedTimeLeft) > 2) {
+                timeLeft = Math.max(0, expectedTimeLeft);
+                updateTimer();
+            }
+        }, 5000);
+
+        const answers = {};
+        const totalQuestions = {{ quiz_data.questions|length }};
+        let answeredCount = 0;
+
+        function selectOption(questionId, optionIndex) {
+            // Clear previous selections for this question
+            const options = document.querySelectorAll(`[id^="option-${questionId}-"]`);
+            options.forEach(opt => opt.classList.remove('selected'));
+            
+            // Select new option
+            document.getElementById(`option-${questionId}-${optionIndex}`).classList.add('selected');
+            
+            // Save answer
+            const wasAnswered = answers.hasOwnProperty(questionId);
+            answers[questionId] = optionIndex;
+            
+            if (!wasAnswered) {
+                answeredCount++;
+            }
+            
+            updateProgress();
+        }
+
+        function saveTextAnswer(questionId, value) {
+            const wasAnswered = answers.hasOwnProperty(questionId) && answers[questionId];
+            answers[questionId] = value;
+            
+            if (!wasAnswered && value.trim()) {
+                answeredCount++;
+            } else if (wasAnswered && !value.trim()) {
+                answeredCount--;
+            }
+            
+            updateProgress();
+        }
+
+        function updateProgress() {
+            const percentage = (answeredCount / totalQuestions) * 100;
+            document.getElementById('progress-fill').style.width = percentage + '%';
+            document.getElementById('progress-text').textContent = 
+                `${answeredCount} of ${totalQuestions} questions answered`;
+            
+            const submitBtn = document.getElementById('submit-btn');
+            if (answeredCount === totalQuestions) {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Submit Quiz';
+                submitBtn.style.background = '#28a745';
+            } else {
+                submitBtn.disabled = true;
+                submitBtn.textContent = `Submit Quiz (${totalQuestions - answeredCount} remaining)`;
+                submitBtn.style.background = '#6c757d';
+            }
+        }
+
+        function submitQuiz(forceSubmit = false) {
+            const candidateName = document.getElementById('candidate-name').value.trim();
+            
+            if (!forceSubmit) {
+                if (!candidateName) {
+                    alert('Please enter your name before submitting.');
+                    document.getElementById('candidate-name').focus();
+                    return;
+                }
+
+                if (answeredCount < totalQuestions) {
+                    if (!confirm(`You have only answered ${answeredCount} out of ${totalQuestions} questions. Are you sure you want to submit?`)) {
+                        return;
+                    }
+                }
+
+                if (!confirm('Are you sure you want to submit your quiz? You cannot change your answers after submission.')) {
+                    return;
+                }
+            }
+
+            // Stop the timer
+            clearInterval(timerInterval);
+
+            const submitBtn = document.getElementById('submit-btn');
+            submitBtn.disabled = true;
+            submitBtn.textContent = forceSubmit ? 'Time Up - Submitting...' : 'Submitting...';
+
+            fetch('/submit_quiz', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    candidate_name: candidateName || 'Anonymous',
+                    answers: answers,
+                    time_forced: forceSubmit,
+                    focus_warnings: focusWarnings,
+                    time_elapsed: Math.floor((Date.now() - startTime) / 1000)
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const message = forceSubmit 
+                        ? `⏰ Time expired! Quiz submitted automatically.\n\nYour Score: ${data.score}/${data.total} (${data.percentage}%)\n\nSubmission ID: ${data.submission_id}`
+                        : `Quiz submitted successfully!\n\nYour Score: ${data.score}/${data.total} (${data.percentage}%)\n\nSubmission ID: ${data.submission_id}`;
+                    
+                    alert(message);
+                    
+                    // Disable all inputs
+                    document.querySelectorAll('.option, .text-input, #candidate-name').forEach(el => {
+                        el.style.pointerEvents = 'none';
+                        el.style.opacity = '0.6';
+                    });
+                    
+                    submitBtn.textContent = 'Quiz Submitted';
+                    submitBtn.style.background = '#6c757d';
+                    
+                    // Hide timer
+                    document.getElementById('timer').style.display = 'none';
+                } else {
+                    alert('Error submitting quiz: ' + data.error);
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Submit Quiz';
+                    // Restart timer if not force submit
+                    if (!forceSubmit) {
+                        timerInterval = setInterval(updateTimer, 1000);
+                    }
+                }
+            })
+            .catch(error => {
+                alert('Error submitting quiz: ' + error.message);
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Submit Quiz';
+                // Restart timer if not force submit
+                if (!forceSubmit) {
+                    timerInterval = setInterval(updateTimer, 1000);
+                }
+            });
+        }
+
+        // Initialize progress
+        updateProgress();
+    </script>
+</body>
+</html>
