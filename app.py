@@ -284,6 +284,7 @@ def submit_quiz():
         candidate_name = data.get('candidate_name', 'Anonymous')
         time_forced = data.get('time_forced', False)
         focus_warnings = data.get('focus_warnings', 0)
+        warnings_shown = data.get('warnings_shown', 0)
         time_elapsed = data.get('time_elapsed', 0)
         
         # Calculate score
@@ -373,14 +374,15 @@ def submit_quiz():
             'time_forced': time_forced,
             'time_elapsed_seconds': time_elapsed,
             'time_elapsed_minutes': round(time_elapsed / 60, 1),
-            'focus_warnings': focus_warnings,
+            'focus_warnings': focus_warnings,  # Total blur events
+            'warnings_shown': warnings_shown,  # Actual warnings shown
             'questions_answered': len([a for a in answers.values() if a != -1 and a != ""])
         }
         
         quiz_responses.append(response_data)
         
         submission_type = "TIME EXPIRED" if time_forced else "MANUAL"
-        focus_note = f" | Focus Warnings: {focus_warnings}" if focus_warnings > 0 else ""
+        focus_note = f" | Focus Warnings: {warnings_shown}/{focus_warnings}" if focus_warnings > 0 else ""
         print(f"✅ QUIZ SUBMITTED ({submission_type}): {candidate_name} - Score: {score}/{total} - Time: {round(time_elapsed/60, 1)}min{focus_note}")
         
         return jsonify({
